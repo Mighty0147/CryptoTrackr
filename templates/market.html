@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}Market - Crypto Investment Tracker{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-6 mb-3">
+                <i data-feather="bar-chart-2" class="me-2"></i>
+                Cryptocurrency Market
+            </h1>
+        </div>
+    </div>
+
+    {% if market_data %}
+    <!-- Market Table -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Market Overview</h5>
+            <small class="text-muted">Data provided by CoinGecko</small>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Name</th>
+                            <th class="text-end">Price</th>
+                            <th class="text-end">1h</th>
+                            <th class="text-end">24h</th>
+                            <th class="text-end">7d</th>
+                            <th class="text-end">Market Cap</th>
+                            <th class="text-end">Volume (24h)</th>
+                            <th class="text-end">Chart</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for coin in market_data %}
+                        <tr>
+                            <td>{{ coin.market_cap_rank }}</td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <img src="{{ coin.image }}" alt="{{ coin.name }}" width="24" height="24" class="me-2">
+                                    <div>
+                                        <div class="fw-medium">{{ coin.name }}</div>
+                                        <small class="text-muted">{{ coin.symbol.upper() }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <div class="fw-medium">${{ "%.2f" if coin.current_price >= 1 else "%.6f" | format(coin.current_price) }}</div>
+                            </td>
+                            <td class="text-end">
+                                {% if coin.price_change_percentage_1h_in_currency %}
+                                <span class="badge bg-{{ 'success' if coin.price_change_percentage_1h_in_currency > 0 else 'danger' }}">
+                                    {{ "%.2f"|format(coin.price_change_percentage_1h_in_currency) }}%
+                                </span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <span class="badge bg-{{ 'success' if coin.price_change_percentage_24h > 0 else 'danger' }}">
+                                    {{ "%.2f"|format(coin.price_change_percentage_24h) }}%
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                {% if coin.price_change_percentage_7d_in_currency %}
+                                <span class="badge bg-{{ 'success' if coin.price_change_percentage_7d_in_currency > 0 else 'danger' }}">
+                                    {{ "%.2f"|format(coin.price_change_percentage_7d_in_currency) }}%
+                                </span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <div class="fw-medium">${{ coin.market_cap|round|int }}</div>
+                            </td>
+                            <td class="text-end">
+                                <div>${{ coin.total_volume|round|int }}</div>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-outline-primary btn-sm" onclick="showCoinChart('{{ coin.id }}', '{{ coin.name }}')">
+                                    <i data-feather="trending-up" size="14"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="d-flex justify-content-center mt-4">
+        <nav>
+            <ul class="pagination">
+                {% if current_page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('market', page=current_page-1) }}">Previous</a>
+                </li>
+                {% endif %}
+                
+                {% for page_num in range([1, current_page-2]|max, [current_page+3, 11]|min) %}
+                <li class="page-item {% if page_num == current_page %}active{% endif %}">
+                    <a class="page-link" href="{{ url_for('market', page=page_num) }}">{{ page_num }}</a>
+                </li>
+                {% endfor %}
+                
+                {% if current_page < 10 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('market', page=current_page+1) }}">Next</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+
+    {% else %}
+    <!-- Error State -->
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i data-feather="wifi-off" size="64" class="text-muted mb-4"></i>
+            <h4>Unable to Load Market Data</h4>
+            <p class="text-muted">Please check your internet connection and try again</p>
+            <button class="btn btn-primary" onclick="location.reload()">
+                <i data-feather="refresh-cw" class="me-1"></i>
+                Retry
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Coin Chart Modal -->
+<div class="modal fade" id="coinChartModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="coinChartTitle">Coin Chart</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="chartPeriod" id="period7" value="7" checked>
+                        <label class="btn btn-outline-primary btn-sm" for="period7">7D</label>
+                        
+                        <input type="radio" class="btn-check" name="chartPeriod" id="period30" value="30">
+                        <label class="btn btn-outline-primary btn-sm" for="period30">30D</label>
+                        
+                        <input type="radio" class="btn-check" name="chartPeriod" id="period90" value="90">
+                        <label class="btn btn-outline-primary btn-sm" for="period90">90D</label>
+                    </div>
+                </div>
+                <div id="chartLoading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <canvas id="coinChart" style="display: none;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentCoinId = null;
+let coinChart = null;
+
+function showCoinChart(coinId, coinName) {
+    currentCoinId = coinId;
+    document.getElementById('coinChartTitle').textContent = `${coinName} Price Chart`;
+    
+    const modal = new bootstrap.Modal(document.getElementById('coinChartModal'));
+    modal.show();
+    
+    loadCoinChart(7); // Default to 7 days
+}
+
+function loadCoinChart(days) {
+    if (!currentCoinId) return;
+    
+    document.getElementById('chartLoading').style.display = 'block';
+    document.getElementById('coinChart').style.display = 'none';
+    
+    // Destroy existing chart
+    if (coinChart) {
+        coinChart.destroy();
+        coinChart = null;
+    }
+    
+    fetch(`/api/market/chart/${currentCoinId}?days=${days}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('chartLoading').style.display = 'none';
+            document.getElementById('coinChart').style.display = 'block';
+            
+            const ctx = document.getElementById('coinChart').getContext('2d');
+            coinChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Price (USD)',
+                        data: data.data,
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Price: $' + context.parsed.y.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading chart:', error);
+            document.getElementById('chartLoading').innerHTML = 
+                '<div class="text-danger">Error loading chart data</div>';
+        });
+}
+
+// Chart period change handlers
+document.querySelectorAll('input[name="chartPeriod"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        if (this.checked) {
+            loadCoinChart(parseInt(this.value));
+        }
+    });
+});
+</script>
+{% endblock %}

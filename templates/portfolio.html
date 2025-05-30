@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+
+{% block title %}Portfolio - Crypto Investment Tracker{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h1 class="display-6 mb-3">
+                <i data-feather="briefcase" class="me-2"></i>
+                Portfolio Management
+            </h1>
+        </div>
+        <div class="col-md-4 text-md-end">
+            {% if current_portfolio %}
+            <button class="btn btn-primary" onclick="showAddTransactionModal()">
+                <i data-feather="plus" class="me-1"></i>
+                Add Transaction
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Portfolio Selector -->
+        <div class="col-lg-3 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Your Portfolios</h6>
+                </div>
+                <div class="card-body">
+                    {% if portfolios %}
+                        <div class="list-group list-group-flush">
+                            {% for portfolio in portfolios %}
+                            <a href="{{ url_for('portfolio', portfolio_id=portfolio.id) }}" 
+                               class="list-group-item list-group-item-action {% if current_portfolio and current_portfolio.id == portfolio.id %}active{% endif %}">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">{{ portfolio.name }}</h6>
+                                    <small>{{ portfolio.holdings|length }} holdings</small>
+                                </div>
+                                <p class="mb-1 small text-muted">{{ portfolio.description or 'No description' }}</p>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No portfolios found</p>
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-sm">Create Portfolio</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Portfolio Details -->
+        <div class="col-lg-9">
+            {% if current_portfolio %}
+                <!-- Portfolio Summary -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">{{ current_portfolio.name }}</h5>
+                        {% if current_portfolio.description %}
+                        <small class="text-muted">{{ current_portfolio.description }}</small>
+                        {% endif %}
+                    </div>
+                    <div class="card-body">
+                        {% if holdings_with_prices %}
+                            {% set total_value = holdings_with_prices | sum(attribute='current_value') %}
+                            {% set total_cost = holdings_with_prices | sum(attribute='cost_basis') %}
+                            {% set total_profit_loss = total_value - total_cost %}
+                            {% set total_profit_loss_pct = (total_profit_loss / total_cost * 100) if total_cost > 0 else 0 %}
+                            
+                            <div class="row text-center">
+                                <div class="col-md-3">
+                                    <h4 class="mb-0">${{ "%.2f"|format(total_value) }}</h4>
+                                    <small class="text-muted">Current Value</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <h4 class="mb-0">${{ "%.2f"|format(total_cost) }}</h4>
+                                    <small class="text-muted">Cost Basis</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <h4 class="mb-0 {% if total_profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        ${{ "%.2f"|format(total_profit_loss) }}
+                                    </h4>
+                                    <small class="text-muted">Profit/Loss</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <h4 class="mb-0 {% if total_profit_loss_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        {{ "%.2f"|format(total_profit_loss_pct) }}%
+                                    </h4>
+                                    <small class="text-muted">Return</small>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-3">
+                                <i data-feather="pie-chart" size="48" class="text-muted mb-3"></i>
+                                <h6 class="text-muted">No holdings yet</h6>
+                                <p class="text-muted">Add your first transaction to start tracking</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Holdings Table -->
+                {% if holdings_with_prices %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">Holdings</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Asset</th>
+                                        <th class="text-end">Quantity</th>
+                                        <th class="text-end">Avg Buy Price</th>
+                                        <th class="text-end">Current Price</th>
+                                        <th class="text-end">Current Value</th>
+                                        <th class="text-end">Profit/Loss</th>
+                                        <th class="text-end">24h Change</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in holdings_with_prices %}
+                                    <tr>
+                                        <td>
+                                            <div>
+                                                <div class="fw-medium">{{ item.holding.crypto_name }}</div>
+                                                <small class="text-muted">{{ item.holding.crypto_symbol.upper() }}</small>
+                                            </div>
+                                        </td>
+                                        <td class="text-end">{{ "%.8f"|format(item.holding.quantity) }}</td>
+                                        <td class="text-end">${{ "%.2f"|format(item.holding.average_buy_price) }}</td>
+                                        <td class="text-end">${{ "%.2f"|format(item.current_price) }}</td>
+                                        <td class="text-end">${{ "%.2f"|format(item.current_value) }}</td>
+                                        <td class="text-end">
+                                            <div class="{% if item.profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                                ${{ "%.2f"|format(item.profit_loss) }}
+                                                <br>
+                                                <small>({{ "%.2f"|format(item.profit_loss_percentage) }}%)</small>
+                                            </div>
+                                        </td>
+                                        <td class="text-end">
+                                            <span class="badge bg-{{ 'success' if item.price_change_24h >= 0 else 'danger' }}">
+                                                {{ "%.2f"|format(item.price_change_24h) }}%
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Portfolio Chart -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">Portfolio Allocation</h6>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="portfolioChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+                {% endif %}
+
+            {% else %}
+                <!-- No Portfolio Selected -->
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i data-feather="briefcase" size="64" class="text-muted mb-4"></i>
+                        <h4>Select a Portfolio</h4>
+                        <p class="text-muted">Choose a portfolio from the sidebar to view details and manage holdings</p>
+                        {% if not portfolios %}
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Create Your First Portfolio</a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Transaction Modal -->
+{% if current_portfolio %}
+<div class="modal fade" id="addTransactionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Transaction</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addTransactionForm">
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label for="transactionType" class="form-label">Type</label>
+                            <select class="form-select" id="transactionType" required>
+                                <option value="">Select type</option>
+                                <option value="buy">Buy</option>
+                                <option value="sell">Sell</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label for="cryptoSearch" class="form-label">Cryptocurrency</label>
+                            <input type="text" class="form-control" id="cryptoSearch" placeholder="Search coins..." required>
+                            <div id="cryptoSearchResults" class="list-group mt-1" style="display: none;"></div>
+                            <input type="hidden" id="selectedCryptoId">
+                            <input type="hidden" id="selectedCryptoSymbol">
+                            <input type="hidden" id="selectedCryptoName">
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label for="quantity" class="form-label">Quantity</label>
+                            <input type="number" class="form-control" id="quantity" step="any" required>
+                        </div>
+                        <div class="col-6">
+                            <label for="pricePerUnit" class="form-label">Price per Unit ($)</label>
+                            <input type="number" class="form-control" id="pricePerUnit" step="any" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="totalValue" class="form-label">Total Value ($)</label>
+                        <input type="number" class="form-control" id="totalValue" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notes (Optional)</label>
+                        <textarea class="form-control" id="notes" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addTransaction()">Add Transaction</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if current_portfolio %}
+<script>
+// Portfolio chart
+{% if holdings_with_prices %}
+fetch(`/api/portfolio/{{ current_portfolio.id }}/chart`)
+    .then(response => response.json())
+    .then(data => {
+        const ctx = document.getElementById('portfolioChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    data: data.data,
+                    backgroundColor: [
+                        '#FF6384',
+                        '#36A2EB',
+                        '#FFCE56',
+                        '#4BC0C0',
+                        '#9966FF',
+                        '#FF9F40',
+                        '#FF6384',
+                        '#C9CBCF'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    })
+    .catch(error => console.error('Error loading portfolio chart:', error));
+{% endif %}
+
+function showAddTransactionModal() {
+    new bootstrap.Modal(document.getElementById('addTransactionModal')).show();
+}
+
+// Crypto search functionality
+let searchTimeout;
+document.getElementById('cryptoSearch').addEventListener('input', function() {
+    const query = this.value.trim();
+    const resultsDiv = document.getElementById('cryptoSearchResults');
+    
+    clearTimeout(searchTimeout);
+    
+    if (query.length < 2) {
+        resultsDiv.style.display = 'none';
+        return;
+    }
+    
+    searchTimeout = setTimeout(() => {
+        fetch(`/api/search/coins?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(coins => {
+                resultsDiv.innerHTML = '';
+                
+                if (coins.length === 0) {
+                    resultsDiv.innerHTML = '<div class="list-group-item">No coins found</div>';
+                } else {
+                    coins.forEach(coin => {
+                        const item = document.createElement('div');
+                        item.className = 'list-group-item list-group-item-action';
+                        item.innerHTML = `
+                            <div class="d-flex align-items-center">
+                                <img src="${coin.thumb}" alt="${coin.name}" width="20" height="20" class="me-2">
+                                <div>
+                                    <div class="fw-medium">${coin.name}</div>
+                                    <small class="text-muted">${coin.symbol}</small>
+                                </div>
+                            </div>
+                        `;
+                        item.addEventListener('click', () => {
+                            selectCrypto(coin);
+                        });
+                        resultsDiv.appendChild(item);
+                    });
+                }
+                
+                resultsDiv.style.display = 'block';
+            })
+            .catch(error => {
+                console.error('Search error:', error);
+                resultsDiv.innerHTML = '<div class="list-group-item text-danger">Search error</div>';
+                resultsDiv.style.display = 'block';
+            });
+    }, 300);
+});
+
+function selectCrypto(coin) {
+    document.getElementById('cryptoSearch').value = coin.name;
+    document.getElementById('selectedCryptoId').value = coin.id;
+    document.getElementById('selectedCryptoSymbol').value = coin.symbol;
+    document.getElementById('selectedCryptoName').value = coin.name;
+    document.getElementById('cryptoSearchResults').style.display = 'none';
+}
+
+// Calculate total value
+function updateTotalValue() {
+    const quantity = parseFloat(document.getElementById('quantity').value) || 0;
+    const price = parseFloat(document.getElementById('pricePerUnit').value) || 0;
+    document.getElementById('totalValue').value = (quantity * price).toFixed(2);
+}
+
+document.getElementById('quantity').addEventListener('input', updateTotalValue);
+document.getElementById('pricePerUnit').addEventListener('input', updateTotalValue);
+
+function addTransaction() {
+    const transactionType = document.getElementById('transactionType').value;
+    const cryptoId = document.getElementById('selectedCryptoId').value;
+    const cryptoSymbol = document.getElementById('selectedCryptoSymbol').value;
+    const cryptoName = document.getElementById('selectedCryptoName').value;
+    const quantity = document.getElementById('quantity').value;
+    const pricePerUnit = document.getElementById('pricePerUnit').value;
+    const notes = document.getElementById('notes').value;
+    
+    if (!transactionType || !cryptoId || !quantity || !pricePerUnit) {
+        alert('Please fill in all required fields');
+        return;
+    }
+    
+    fetch(`/api/portfolio/{{ current_portfolio.id }}/transaction`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            transaction_type: transactionType,
+            crypto_id: cryptoId,
+            crypto_symbol: cryptoSymbol,
+            crypto_name: cryptoName,
+            quantity: quantity,
+            price_per_unit: pricePerUnit,
+            notes: notes
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error adding transaction: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error adding transaction');
+    });
+}
+
+// Hide search results when clicking outside
+document.addEventListener('click', function(event) {
+    const searchInput = document.getElementById('cryptoSearch');
+    const resultsDiv = document.getElementById('cryptoSearchResults');
+    
+    if (!searchInput.contains(event.target) && !resultsDiv.contains(event.target)) {
+        resultsDiv.style.display = 'none';
+    }
+});
+</script>
+{% endif %}
+{% endblock %}
